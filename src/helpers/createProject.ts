@@ -4,7 +4,7 @@ import { getUserPkgManager } from "../utils/getUserPkgManager.js";
 import { curryRunPkgManagerInstall } from "../utils/runPkgManagerInstall.js";
 import { installPackages } from "./installPackages.js";
 import { scaffoldProject } from "./scaffoldProject.js";
-import { selectAppFile, selectIndexFile } from "./selectBoilerplate.js";
+import { transformAppFile, selectIndexFile } from "./selectBoilerplate.js";
 
 interface CreateProjectOptions {
   projectName: string;
@@ -45,7 +45,7 @@ export const createProject = async ({
   });
 
   // TODO: Look into using handlebars or other templating engine to scaffold without needing to maintain multiple copies of the same file
-  await selectAppFile({ projectDir, packages });
+  await transformAppFile({ projectDir, packages });
   await selectIndexFile({ projectDir, packages });
 
   return projectDir;

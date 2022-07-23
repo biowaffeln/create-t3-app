@@ -1,35 +1,69 @@
 import type { InstallerOptions } from "../installers/index.js";
 import path from "path";
 import fs from "fs-extra";
+import j from "jscodeshift";
 import { PKG_ROOT } from "../consts.js";
+import { addImports } from "../utils/codemod/addImports.js";
+import { transformFile } from "../utils/codemod/transformFile.js";
 
 type SelectBoilerplateProps = Required<
   Pick<InstallerOptions, "projectDir" | "packages">
 >;
 // This generates the _app.tsx file that is used to render the app
-export const selectAppFile = async ({
+export const transformAppFile = async ({
   projectDir,
   packages,
 }: SelectBoilerplateProps) => {
-  const appFileDir = path.join(PKG_ROOT, "template/page-studs/_app");
-
   const usingTrpc = packages.trpc.inUse;
   const usingNextAuth = packages.nextAuth.inUse;
 
-  let appFile = "";
-  if (usingNextAuth && usingTrpc) {
-    appFile = "with-auth-trpc.tsx";
-  } else if (usingNextAuth && !usingTrpc) {
-    appFile = "with-auth.tsx";
-  } else if (!usingNextAuth && usingTrpc) {
-    appFile = "with-trpc.tsx";
-  }
+  const appDest = path.join(projectDir, "src/pages/_app.tsx");
+  await transformFile(appDest, (program) => {
+    if (usingNextAuth) {
+      nextAuthTransform(program);
+    }
+    if (usingTrpc) {
+      trpcTransform(program);
+    }
+  });
+};
 
-  if (appFile !== "") {
-    const appSrc = path.join(appFileDir, appFile);
-    const appDest = path.join(projectDir, "src/pages/_app.tsx");
-    await fs.copy(appSrc, appDest);
-  }
+const nextAuthTransform = (program: j.Collection) => {
+  addImports(program, [
+    j.template
+      .statement`import { SessionProvider } from "next-auth/react"` as j.Node,
+  ]);
+
+  program
+    .find(j.JSXElement, { openingElement: { name: { name: "Component" } } })
+    .forEach((p) => {
+      p.replace(
+        j.jsxElement(
+          j.jsxOpeningElement(j.jsxIdentifier("SessionProvider"), [
+            j.jsxAttribute(
+              j.jsxIdentifier("session"),
+              j.jsxExpressionContainer(j.identifier("pageProps.session")),
+            ),
+          ]),
+          j.jsxClosingElement(j.jsxIdentifier("SessionProvider")),
+          [j.jsxText("\n"), p.node, j.jsxText("\n")],
+        ),
+      );
+    });
+};
+
+const trpcTransform = (program: j.Collection) => {
+  addImports(program, [
+    j.template.statement`import { trpc } from "../utils/trpc";` as j.Node,
+  ]);
+
+  // wrap default export with withTrpc
+  program
+    .find(j.ExportDefaultDeclaration)
+    .find(j.Identifier)
+    .forEach((p) => {
+      p.node.name = `trpc.withTRPC(${p.node.name})`;
+    });
 };
 
 // This selects the proper index.tsx to be used that showcases the chosen tech

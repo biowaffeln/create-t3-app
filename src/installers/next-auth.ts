@@ -1,7 +1,10 @@
 import type { Installer } from "./index.js";
 import path from "path";
 import fs from "fs-extra";
+import j, { Node } from "jscodeshift";
 import { PKG_ROOT } from "../consts.js";
+import { addImports } from "../utils/codemod/addImports.js";
+import { transformFile } from "../utils/codemod/transformFile.js";
 
 export const nextAuthInstaller: Installer = async ({
   projectDir,
@@ -18,10 +21,7 @@ export const nextAuthInstaller: Installer = async ({
 
   const nextAuthAssetDir = path.join(PKG_ROOT, "template/addons/next-auth");
 
-  const apiHandlerSrc = path.join(
-    nextAuthAssetDir,
-    packages?.prisma.inUse ? "api-handler-prisma.ts" : "api-handler.ts",
-  );
+  const apiHandlerSrc = path.join(nextAuthAssetDir, "api-handler.ts");
   const apiHandlerDest = path.join(
     projectDir,
     "src/pages/api/auth/[...nextauth].ts",
@@ -41,4 +41,37 @@ export const nextAuthInstaller: Installer = async ({
     fs.copy(restrictedApiSrc, restrictedApiDest),
     fs.copy(nextAuthDefinitionSrc, nextAuthDefinitionDest),
   ]);
+
+  if (packages?.prisma.inUse) {
+    await transformFile(apiHandlerDest, (program) => {
+      // 1. add imports
+      const adapterImport = j.template
+        .statement`\nimport { PrismaAdapter } from "@next-auth/prisma-adapter";` as Node;
+      const prismaImport = j.template
+        .statement`\nimport { prisma } from "../../../server/db/client";` as Node;
+      adapterImport.comments = [
+        j.commentLine(
+          "Prisma adapter for NextAuth, optional and can be removed",
+        ),
+      ];
+      addImports(program, [adapterImport, prismaImport]);
+
+      // 2. add adapter property to authOptions
+      program
+        .find(j.VariableDeclarator, { id: { name: "authOptions" } })
+        .find(j.ObjectExpression)
+        .at(0)
+        .forEach((p) => {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+          p.get("properties").push(
+            j.objectProperty(
+              j.identifier("adapter"),
+              j.identifier("PrismaAdapter(prisma)"),
+            ),
+          );
+        });
+
+      return program;
+    });
+  }
 };
