@@ -31,7 +31,7 @@ export const transformAppFile = async ({
 const nextAuthTransform = (program: j.Collection) => {
   addImports(program, [
     j.template
-      .statement`import { SessionProvider } from "next-auth/react"` as j.Node,
+      .statement`import { SessionProvider } from "next-auth/react";\n` as j.Node,
   ]);
 
   program
@@ -54,7 +54,7 @@ const nextAuthTransform = (program: j.Collection) => {
 
 const trpcTransform = (program: j.Collection) => {
   addImports(program, [
-    j.template.statement`import { trpc } from "../utils/trpc";` as j.Node,
+    j.template.statement`import { trpc } from "../utils/trpc";\n` as j.Node,
   ]);
 
   // wrap default export with withTrpc
