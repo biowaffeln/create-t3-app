@@ -70,8 +70,6 @@ export const nextAuthInstaller: Installer = async ({
             ),
           );
         });
-
-      return program;
     });
   }
 };
